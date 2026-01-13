@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>WiFi File Transfer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  font-family: Arial;
+  background:#f2f4f8;
+  padding:10px;
+}
+
+.box {
+  background:#fff;
+  padding:15px;
+  border-radius:8px;
+}
+
+button {
+  padding:12px;
+  background:#007bff;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  width:100%;
+  margin-top:6px;
+  font-size:15px;
+}
+button:hover { background:#0056b3 }
+
+.secondary { background:#6c757d }
+.secondary:hover { background:#545b62 }
+
+.danger { background:#dc3545 }
+.danger:hover { background:#b02a37 }
+
+.list {
+  max-height:260px;
+  overflow-y:auto;
+  border:1px solid #ddd;
+  border-radius:5px;
+}
+
+.list div {
+  padding:10px;
+  border-bottom:1px solid #eee;
+  cursor:pointer;
+}
+
+.path {
+  background:#eef;
+  padding:8px;
+  border-radius:5px;
+  margin-top:6px;
+  font-size:13px;
+  word-break:break-all;
+}
+
+/* ===== MODAL (MOBILE FIXED) ===== */
+.modal {
+  display: none;                 /* 🔴 hidden by default */
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+
+.modal-content {
+  background:#fff;
+  width:95%;
+  max-width:420px;
+  max-height:90vh;
+  display:flex;
+  flex-direction:column;
+  padding:12px;
+  border-radius:8px;
+}
+
+.modal-header {
+  font-weight:bold;
+  margin-bottom:6px;
+}
+
+.modal-body {
+  flex:1;
+  overflow:hidden;
+}
+
+.modal-footer {
+  margin-top:8px;
+}
+
+.progress {
+  height:20px;
+  background:#ddd;
+  border-radius:5px;
+  overflow:hidden;
+  margin-top: 10px;
+}
+.bar {
+  height:100%;
+  width:0%;
+  background:#28a745;
+}
+
+#newFolder {
+  margin-top:8px;
+  padding:8px;
+  width:calc(100% - 16px);
+  border:1px solid #ccc;
+  border-radius:5px;
+}
+</style>
+</head>
+
+<body>
+<div class="box">
+
+<h3>📂 Upload Destination</h3>
+<button onclick="openModal()">Select Folder</button>
+<button class="danger" onclick="resetPath()">Reset Selection</button>
+<div id="selectedPath" class="path">No folder selected</div>
+
+<hr>
+
+<h3>📤 Upload Files</h3>
+<input type="file" webkitdirectory multiple id="files">
+<button onclick="upload()">Upload</button>
+
+<div class="progress"><div class="bar" id="bar"></div></div>
+<div id="result"></div>
+
+</div>
+
+<!-- ================= MODAL ================= -->
+<div class="modal" id="modal">
+  <div class="modal-content">
+
+    <div class="modal-header">Select Folder</div>
+
+    <button class="secondary" id="backBtn" onclick="goBack()" style="display:none">
+      ⬅ Back
+    </button>
+
+    <div id="currentPath" class="path"></div>
+
+    <div class="modal-body">
+      <div class="list" id="list"></div>
+    </div>
+
+    <input id="newFolder" placeholder="New folder name">
+    <button onclick="createFolder()">Create Folder</button>
+
+    <div class="modal-footer">
+      <button onclick="confirmFolder()">Confirm This Folder</button>
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let historyStack = [];
+let currentPath = null;
+
+/* ================= MODAL ================= */
+function openModal() {
+  document.getElementById("modal").style.display = "flex";
+  historyStack = [];
+  currentPath = null;
+  loadDrives();
+}
+
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
+}
+
+function resetPath() {
+  currentPath = null;
+  document.getElementById("selectedPath").innerText = "No folder selected";
+}
+
+/* ================= DRIVE / FOLDER ================= */
+async function loadDrives() {
+  const drives = await fetch("/api/drives").then(r => r.json());
+  document.getElementById("currentPath").innerText = "Select Drive";
+  historyStack = [];
+  toggleBack();
+  render(drives.map(d => ({ name:d, path:d+"\\" })));
+}
+
+function render(items) {
+  const el = document.getElementById("list");
+  el.innerHTML = "";
+  items.forEach(i => {
+    const d = document.createElement("div");
+    d.innerText = "📁 " + i.name;
+    d.onclick = () => openPath(i.path);
+    el.appendChild(d);
+  });
+}
+
+async function openPath(p) {
+  if (currentPath !== null) {
+    historyStack.push(currentPath);
+  } else {
+    historyStack.push("__DRIVES__");
+  }
+
+  currentPath = p;
+  document.getElementById("currentPath").innerText = p;
+  toggleBack();
+
+  const folders = await fetch(
+    "/api/folders?path=" + encodeURIComponent(p)
+  ).then(r => r.json());
+
+  render(folders.map(f => ({ name:f, path:p + "\\" + f })));
+}
+
+function goBack() {
+  const prev = historyStack.pop();
+
+  if (!prev || prev === "__DRIVES__") {
+    currentPath = null;
+    return loadDrives();
+  }
+
+  currentPath = prev;
+  document.getElementById("currentPath").innerText = prev;
+  toggleBack();
+  openPath(prev);
+  historyStack.pop(); // prevent double push
+}
+
+function toggleBack() {
+  document.getElementById("backBtn").style.display =
+    historyStack.length ? "block" : "none";
+}
+
+/* ================= CREATE FOLDER ================= */
+async function createFolder() {
+  const name = document.getElementById("newFolder").value;
+  if (!name || !currentPath) return;
+
+  await fetch("/api/create-folder", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ path: currentPath, name })
+  });
+
+  openPath(currentPath);
+}
+
+/* ================= CONFIRM ================= */
+async function confirmFolder() {
+  if (!currentPath) return alert("Select a folder");
+
+  await fetch("/set-path", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ path: currentPath })
+  });
+
+  document.getElementById("selectedPath").innerText = currentPath;
+  closeModal();
+}
+
+/* ================= UPLOAD ================= */
+function upload() {
+  const files = document.getElementById("files").files;
+  if (!files.length) return alert("Select files");
+
+  const fd = new FormData();
+  for (let f of files) fd.append("files", f);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST","/upload");
+
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) {
+      document.getElementById("bar").style.width =
+        Math.round(e.loaded / e.total * 100) + "%";
+    }
+  };
+
+  xhr.onload = () => {
+    const r = JSON.parse(xhr.responseText);
+    document.getElementById("result").innerHTML =
+      `Uploaded: ${r.uploaded}<br>Skipped: ${r.skipped}`;
+  };
+
+  xhr.send(fd);
+}
+</script>
+</body>
+</html>

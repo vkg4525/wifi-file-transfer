@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h3>Select Destination Folder (PC)</h3>
+
+<input id="path" placeholder="D:\\PhoneUploads" size="40">
+<button onclick="save()">Save</button>
+
+<p id="msg"></p>
+
+<script>
+function save() {
+  fetch("/set-path", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: document.getElementById("path").value })
+  })
+  .then(r => r.text())
+  .then(t => document.getElementById("msg").innerText = t);
+}
+</script>
+</body>
+</html>

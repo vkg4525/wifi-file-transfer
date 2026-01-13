@@ -8,7 +8,6 @@
 
 3. Know your system IP:
    Windows + R > type `cmd` > in command prompt type `ipconfig` > Check for IPv4 Address under Wireless LAN adapter Wf-Fi
-   <img width="1117" height="308" alt="image" src="https://github.com/user-attachments/assets/9632beeb-d709-4361-a7c1-7b15105f64f3" />
 
 4. Access application in devices from which you want to transfer the files.
    `192.168.xx.x:3000`  
